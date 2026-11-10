@@ -6,46 +6,47 @@
 
 **NAME OF EXP:** Timer-Based LED Pattern Generator and Button Interrupt Controller / Switch Polling  
 
-**HARDWARE SETUP / PLATFORM:** AT89S52 Microcontroller Development Board + 4x Discrete LEDs + 1x Tactile Push-Button + 10kΩ Pull-Up Resistor + Keil µVision C51  
+**HARDWARE SETUP / PLATFORM:** AT89S52 Microcontroller Board + 4 LEDs + 1 Push Button + 10kΩ Resistor + Keil µVision C51  
 
 ---
 
-## TASK 3A : Switch Polling with Hardware & Software Debouncing
+## TASK 3A : Switch Polling with Software Debouncing
 
 ### 1. Circuit Diagram
 
-The circuit interfaces four output LEDs on Port 1 and a tactile push-button switch on Port 3.
+The circuit connects 4 LEDs to Port 1 (`P1.0` through `P1.3`) and a push button to Port 3 Pin 2 (`P3.2`).
 
 - **Microcontroller:** AT89S52
-- **Switch Input Pin:** Port 3, Pin 2 (`P3.2` / `INT0`)
-- **Switch Configuration:** Active LOW with 10 kΩ pull-up resistor to +5V
+- **Switch Input Pin:** `P3.2` with an external 10kΩ pull-up resistor to +5V (Active LOW)
 - **LED Output Pins:** `P1.0` (LED1), `P1.1` (LED2), `P1.2` (LED3), `P1.3` (LED4)
-- **Current Limiting:** 4x 330 Ω Resistors in series with each LED anode
+- **Resistors:** 330Ω in series with each LED to limit current
 
 ![Circuit Diagram](circuit.png)
 
-### 2. Core Logic / Pseudocode / Code Base
+### 2. Core Logic & Switch Debouncing
 
-**Working Principle:**
+Mechanical buttons physically bounce when pressed, which can make the microcontroller think the button was pressed 5 to 10 times in a fraction of a second. To fix this, we use software debouncing:
+1. When we detect `P3.2 == 0` (button pressed), we wait 25 ms for the contacts to settle.
+2. If `P3.2` is still `0`, we accept it as a genuine button press and change the mode.
+3. We then wait for the user to release the button (`while (BUTTON == 0)`) with another small delay to prevent multiple triggers from a single press.
 
-Mechanical switches exhibit mechanical contact bounce lasting 5 ms to 20 ms during transition. Without debouncing, a single button press generates multiple spurious state transitions. Software debouncing samples the pin, inserts a 25 ms settling delay, and re-verifies the stable state before registering a state advance.
+---
 
-Each valid button press cycles through a 4-state finite state machine:
-- **Mode 1 (Running LED):** LEDs illuminate sequentially ($0001_2 	o 0010_2 	o 0100_2 	o 1000_2$).
-- **Mode 2 (Binary Counter):** 4-bit binary progression from $0000_2$ (0) to $1111_2$ (15).
-- **Mode 3 (Alternating Pattern):** Alternate pairs toggle ($1010_2 \leftrightarrow 0101_2$).
-- **Mode 4 (All LED Flash):** Synchronous flashing of all 4 LEDs ($1111_2 \leftrightarrow 0000_2$).
+## TASK 3B : 4-State LED Pattern Sequencer
 
-**Pseudocode:**
-1. Configure `P3.2 = 1` for input mode.
-2. Initialize `P1 = 0x00` (all LEDs OFF).
-3. Poll `P3.2`. If logic LOW:
-   - Delay 25 ms.
-   - If still LOW, increment `current_mode` (wrap from 4 to 1).
-   - Wait until `P3.2 == 1` (button release) and delay 25 ms.
-4. Execute LED pattern for active `current_mode`.
+### 1. Operating Modes
 
-**Code Base (`main.c`):**
+Each valid button press increments the mode counter (from 1 to 4, then wraps back to 1):
+
+| Mode Number | Mode Name | Behavior of LEDs |
+|:---:|---|---|
+| **Mode 1** | **Running LED** | Lights one LED at a time: LED1 $	o$ LED2 $	o$ LED3 $	o$ LED4 $	o$ repeat |
+| **Mode 2** | **4-Bit Binary Counter** | Counts from `0000` (0) to `1111` (15) in binary |
+| **Mode 3** | **Alternating Pattern** | Toggles odd and even LEDs: `1010` $\leftrightarrow$ `0101` |
+| **Mode 4** | **All-LED Flash** | All 4 LEDs flash together: `1111` $\leftrightarrow$ `0000` |
+
+### 2. Code Base (`main.c` excerpt)
+
 ```c
 #include <reg51.h>
 
@@ -62,19 +63,21 @@ unsigned char current_mode = 0;
 unsigned char counter_val = 0;
 
 void main(void) {
-    BUTTON = 1;
-    P1 = 0x00;
+    BUTTON = 1; /* Set P3.2 as input */
+    P1 = 0x00;  /* Turn off all LEDs initially */
+
     while (1) {
         if (BUTTON == 0) {
-            delay_ms(25);
+            delay_ms(25); /* Debounce delay */
             if (BUTTON == 0) {
                 current_mode++;
                 if (current_mode > 4) current_mode = 1;
                 counter_val = 0;
-                while (BUTTON == 0);
+                while (BUTTON == 0); /* Wait for release */
                 delay_ms(25);
             }
         }
+
         switch (current_mode) {
             case 1: /* Running LED */
                 P1 = 0x01; delay_ms(200);
@@ -102,4 +105,4 @@ void main(void) {
 
 ### 3. Inference
 
-The software debounce algorithm successfully suppressed mechanical contact chatter, guaranteeing exactly one mode transition per physical actuation. The finite state machine responded reliably across all four pattern sequences.
+Adding software debouncing completely eliminated the erratic skipping behavior caused by mechanical contact bounce. Every single button press moved smoothly to the next LED sequence without false triggers.

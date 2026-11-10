@@ -10,72 +10,51 @@
 
 ---
 
-## TASK 10A & 10B : Dual-UART Bridging & AT Command Investigation
+## TASK 10A : Dual-UART Bridging & AT Commands
 
 ### 1. Circuit Diagram
 
-The STM32 microcontroller coordinates two simultaneous asynchronous serial peripherals: `USART2` communicating directly with the ESP8266 AT firmware, and `USART1` acting as the live debugging bridge to the host PC.
+In this experiment, the STM32 acts as a bridge and web server controller connected to the ESP8266 Wi-Fi module.
 
-- **Microcontroller:** STM32F103C8T6
-- **Wi-Fi Modem:** Wemos D1 Mini / ESP8266 SoC
-- **Modem Interface (USART2):** `PA2` (TX) $	o$ Wemos `RX`, `PA3` (RX) $\leftarrow$ Wemos `TX` @ 115200 baud
-- **PC Debug Interface (USART1):** `PA9` (TX) $	o$ USB-TTL `RX`, `PA10` (RX) $\leftarrow$ USB-TTL `TX` @ 115200 baud
-- **Modem Power:** +5V / +3.3V DC and Common GND
+- **STM32 Blue Pill:**
+  - `USART1` (Pins `PA9` TX, `PA10` RX) connected to PC via USB-TTL for debugging output.
+  - `USART2` (Pins `PA2` TX, `PA3` RX) connected to Wemos D1 Mini pins `RX` and `TX`.
+- **Wemos D1 Mini (ESP8266):** Powered by 3.3V/5V with common ground.
+- **LED Indicator:** On-board LED on `PC13` controlled via web requests.
 
 ![Circuit Diagram](circuit.png)
 
-### 2. AT Command Interface Protocol
+### 2. Standard AT Commands Tested
 
-| Command Sent | Purpose | Expected Modem Response |
+| AT Command | Expected Response | Purpose |
 |---|---|---|
-| `AT` | Ping modem & test baud rate | `OK` |
-| `AT+GMR` | Query firmware & SDK version | SDK version & `OK` |
-| `AT+CWMODE=1` | Set Wi-Fi to Station (Client) Mode | `OK` |
-| `AT+CWLAP` | Scan for local wireless Access Points | List of AP SSIDs & signal strengths |
-| `AT+CWJAP="SSID","PASS"` | Connect to local Wi-Fi router | `WIFI CONNECTED
-WIFI GOT IP
-OK` |
-| `AT+CIFSR` | Query assigned Station IP address | `+CIFSR:STAIP,"192.168.1.105"` |
+| `AT` | `OK` | Checks if ESP8266 modem is alive and responding |
+| `AT+CWMODE=1` | `OK` | Sets ESP8266 to Station Mode (client connecting to home/lab Wi-Fi) |
+| `AT+CWJAP="SSID","PASS"`| `WIFI CONNECTED
+OK` | Connects the module to the local Wi-Fi router |
+| `AT+CIFSR` | `+CIFSR:STAIP,"192.168.x.x"`| Retrieves the assigned local IP address |
+| `AT+CIPMUX=1` | `OK` | Enables multiple incoming TCP connections |
+| `AT+CIPSERVER=1,80` | `OK` | Starts a TCP web server listening on port 80 |
 
 ---
 
-## TASK 10C, 10D & 10E : TCP Server, HTTP Response Transmission & Node-RED
+## TASK 10B : Embedded HTTP Server & Node-RED Integration
 
 ### 1. Working Principle
 
-1. **TCP Server Activation:** The ESP8266 is placed into multi-connection mode (`AT+CIPMUX=1`) and listening socket opened on standard HTTP port 80 (`AT+CIPSERVER=1,80`).
-2. **Parsing `+IPD` Frames:** When a web browser or Node-RED makes a `GET / HTTP/1.1` request, the ESP8266 emits an asynchronous packet notification:
-   `+IPD,<link_id>,<data_len>:GET / HTTP/1.1...`
-3. **Two-Step HTTP Response:**
-   - **Step 1:** Issue transmission command with exact payload size:
-     `sprintf(cmd, "AT+CIPSEND=%d,%d
-", link_id, total_bytes);`
-   - **Step 2:** Transmit formatted HTTP string containing header and HTML body:
-     ```text
-     HTTP/1.1 200 OK
+1. **Incoming Request:** When a web browser or Node-RED makes an HTTP GET request to the ESP8266's IP address on port 80, the modem outputs a serial notification to STM32:  
+   `+IPD,<link_id>,<len>:GET /led/on HTTP/1.1...`
+2. **STM32 Parsing:** The STM32 reads this stream over USART2. If the path contains `/led/on`, it sets `PC13 = LOW` (LED ON); if it contains `/led/off`, it sets `PC13 = HIGH` (LED OFF).
+3. **HTTP Response:** The STM32 sends back a standard HTTP 200 response with a small HTML webpage so the browser displays the updated LED status.
+4. **Node-RED Client:** An HTTP Request node in Node-RED sends automated GET requests to control the LED based on dashboard buttons.
 
-     Content-Type: text/html
+### 2. Node-RED Flow Configuration
 
-     Content-Length: 124
-
-     Connection: close
-
-     
-
-     <html><body><h1>STM32 IoT Node</h1></body></html>
-     ```
-4. **Node-RED Client:** An `inject` node triggers an `http request` node targeting `http://<ESP_IP>:80/`. The returned HTML payload is visualized directly in the Node-RED debug panel.
-
-### 2. Node-RED Configuration (`node_red_http_flow.json`)
-
-```json
-[
-  {"id":"http_inject","type":"inject","name":"Poll STM32 HTTP Server","repeat":"5","wires":[["stm32_http_req"]]},
-  {"id":"stm32_http_req","type":"http request","method":"GET","url":"http://192.168.1.105:80/","wires":[["http_debug"]]},
-  {"id":"http_debug","type":"debug","name":"Display HTTP Response","wires":[]}
-]
-```
+The included `node_red_http_flow.json` file sets up a simple dashboard:
+- An **Inject / Button Node** sends `GET http://<ESP_IP>/led/on`
+- A second **Button Node** sends `GET http://<ESP_IP>/led/off`
+- A **Debug Node** displays the returned HTML/JSON status.
 
 ### 3. Inference
 
-The dual-UART bridge enabled transparent firmware command interaction with the ESP8266. The STM32 successfully handled TCP socket lifecycles, accurately measured HTTP string lengths for `AT+CIPSEND`, and rendered dynamic sensor webpages to both Chrome web browsers and Node-RED flows.
+The STM32 successfully initialized the ESP8266 using AT commands, joined the local Wi-Fi network, and ran an embedded web server on port 80. Both the web browser and Node-RED successfully toggled the physical LED over Wi-Fi.

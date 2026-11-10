@@ -6,59 +6,57 @@
 
 **NAME OF EXP:** 8051 Development Board Tool Chain Setup & GPIO Interfacing  
 
-**HARDWARE SETUP / PLATFORM:** 8051 Development Board (AT89S52) + Keil µVision C51 + USB-ISP Programmer + Breadboard & Discrete LEDs  
+**HARDWARE SETUP / PLATFORM:** 8051 Microcontroller (AT89S52) + Keil µVision C51 + USB-ISP Programmer + Breadboard + Red LED + 330Ω Resistor  
 
 ---
 
-## TASK 2A : Hardware Board Bring-Up & Rail Verification
+## TASK 2A : Hardware Board Bring-Up
 
 ### 1. Circuit Diagram
 
-The experiment demonstrates initial hardware board bring-up and bare-metal LED blink control using the AT89S52 8-bit microcontroller.
+This experiment demonstrates basic GPIO output control using the AT89S52 microcontroller to blink an external LED at ~1 Hz.
 
-- **Microcontroller:** AT89S52 (40-Pin DIP)
-- **CPU Architecture:** 8051 8-bit CISC Core @ 11.0592 MHz
-- **Operating Voltage:** +5.0 V DC (Regulated)
-- **GPIO Port / Pin:** Port 1, Pin 0 (`P1.0`, Physical Pin 1)
-- **Connected Peripheral:** Red 5mm LED with 330Ω Current-Limiting Resistor
-- **Programming Interface:** 10-pin USB-ISP Header (SPI lines MOSI/MISO/SCK/RST)
+- **Microcontroller:** AT89S52 (40-Pin DIP package)
+- **Clock:** 11.0592 MHz crystal with two 33pF capacitors
+- **Power Supply:** +5V DC regulated
+- **LED Connection:** Port 1 Pin 0 (`P1.0`, Pin 1) connected in series with a 330Ω current-limiting resistor to ground
 
 ![Circuit Diagram](circuit.png)
 
 ### 2. Hardware Bring-Up Sheet
 
-| Parameter | Measurement / Specification Entry |
+| Parameter | Student Entry / Value Observed |
 |---|---|
-| **MCU Model** | Atmel AT89S52 |
-| **CPU Core Architecture** | 8051 8-bit CISC Harvard Architecture |
-| **Clock Oscillator Frequency** | 11.0592 MHz (1 Machine Cycle = 1.0851 µs) |
-| **Operating Voltage ($V_{CC}$)** | +5.02 V DC (Verified with Digital Multimeter) |
-| **Debug / Flash Interface** | USB-ISP In-System Programming Header |
-| **LED GPIO Port & Pin** | Port 1, Pin 0 (`P1.0`, Physical Pin 1) |
-| **LED Active State** | Active HIGH (Current Sourcing from MCU) |
-| **Blink Frequency ($f$)** | ~1.0 Hz (500 ms ON, 500 ms OFF, 50% Duty Cycle) |
+| **MCU** | Atmel AT89S52 |
+| **CPU Core** | 8051 8-bit CISC |
+| **Operating Voltage** | +5.02 V DC (checked with multimeter) |
+| **Debug / Programmer Interface** | USB-ISP Header (SPI lines MOSI/MISO/SCK/RST) |
+| **LED GPIO Port** | Port 1 |
+| **LED GPIO Pin** | P1.0 (Physical Pin 1) |
+| **LED Active State** | Active HIGH (1 = LED ON, 0 = LED OFF) |
+| **LED Frequency (Hz)** | ~1.0 Hz (500 ms ON, 500 ms OFF) |
 
 ---
 
-## TASK 2B : Bare-Metal LED Blink & Modular Delay Library
+## TASK 2B : Bare-Metal LED Blink & Delay Function
 
 ### 1. Core Logic / Pseudocode / Code Base
 
 **Working Principle:**
 
-The AT89S52 microcontroller has four 8-bit bidirectional I/O ports: P0, P1, P2, and P3. In bare-metal programming, Port 1 is directly accessed through its memory-mapped Special Function Register (`P1` at SFR address `0x90`). By assigning `sbit LED = P1^0`, the CPU manipulates the specific latch bit directly without overhead.
+The 8051 microcontroller controls its I/O pins through Special Function Registers (SFRs). Port 1 is memory-mapped at address `0x90`. By defining `sbit LED = P1^0`, we can directly write `1` (5V) to turn the LED on, or `0` (0V) to turn it off.
 
-A modular delay function `delay_ms(unsigned int ms)` utilizes calibrated nested loops to generate standard time increments of 1 millisecond. Since each machine cycle requires 12 oscillator periods ($T_{cy} = 12 / 11.0592	ext{ MHz} pprox 1.085\,\mu	ext{s}$), a calibrated inner loop of 120 iterations provides exactly 1 ms delay.
+To create the blinking effect, we built a modular software delay function `delay_ms()` using nested loops. At 11.0592 MHz, one machine cycle takes approximately 1.085 µs. A calibrated loop of 120 iterations produces about 1 millisecond of delay.
 
 **Pseudocode:**
-1. Include register definitions header `<reg51.h>`.
-2. Map `P1.0` as bit-addressable symbol `LED`.
-3. Construct modular loop `delay_ms(ms)`.
-4. Initialize `P1 = 0x00` setting pin to logic LOW.
+1. Include register definitions from `reg51.h`.
+2. Map `P1.0` to the identifier `LED`.
+3. Create `delay_ms(ms)` using two nested for-loops.
+4. In `main()`, initialize Port 1 to `0x00`.
 5. In an infinite loop:
-   - Set `LED = 1` (turns LED ON).
+   - Turn the LED ON by writing `LED = 1`.
    - Call `delay_ms(500)`.
-   - Set `LED = 0` (turns LED OFF).
+   - Turn the LED OFF by writing `LED = 0`.
    - Call `delay_ms(500)`.
 
 **Code Base (`main.c`):**
@@ -87,4 +85,4 @@ void main(void) {
 
 ### 3. Inference
 
-The hardware bring-up confirmed correct DC rail distribution (+5.02V) across the AT89S52 development board. Direct register manipulation of `P1.0` produced consistent, non-flickering LED toggling at exactly 1.0 Hz. The software delay implementation demonstrated accurate machine-cycle timing based on the 11.0592 MHz crystal oscillator.
+The hardware voltage rails were verified at 5.02V, confirming stable board power. Writing to the `P1.0` bit latch successfully alternated the pin between 5V and 0V, causing the LED to blink smoothly at 1 Hz. We learned how to access 8051 memory-mapped GPIO registers and calibrate software delay loops in Keil C51.

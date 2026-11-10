@@ -6,64 +6,50 @@
 
 **NAME OF EXP:** Commercial IoT Device Teardown and 8051 Toolchain Setup  
 
-**HARDWARE SETUP / PLATFORM:** Commercial IoT Smart Device (Smart Plug / Bulb) + AT89S52 Microcontroller Development Board + Keil µVision C51 + USB-ISP Programmer  
+**HARDWARE SETUP / PLATFORM:** Commercial Wi-Fi Smart Plug (ESP8266) + AT89S52 Microcontroller Board + Keil µVision C51 + USB-ISP Programmer  
 
 ---
 
-## TASK 1A : Commercial IoT Device Teardown Analysis
+## TASK 1A : Commercial IoT Device Teardown
 
-### 1. Circuit Diagram & Functional Decomposition
+### 1. Circuit Diagram & Block Diagram
 
-The experiment conducts an architectural teardown of a commercial IoT end-node (Wi-Fi Smart Plug) to identify fundamental hardware subsystems, power domains, RF stages, and sensor/actuator interfaces.
+In this task, we carefully opened up a standard commercial Wi-Fi smart plug to understand the internal electronic building blocks of a real IoT product.
 
-- **Target Device:** Commercial Wi-Fi Smart Power Plug (16A 250V Rating)
-- **Primary Controller:** ESP8266 / BK7231 2.4 GHz 802.11 b/g/n Wi-Fi SoC (32-bit RISC Core)
-- **Power Subsystem:** Isolated AC-DC Flyback Converter (230V AC Mains to 5V DC) + High-Efficiency Low-Dropout (LDO) Regulator (5V to 3.3V DC)
-- **Actuator Subsystem:** 16A 250V AC Relay driven by an NPN BJT with inductive clamp flyback diode
-- **Energy Metering IC:** BL0937 single-phase bi-directional energy metering chip
-- **HMI Components:** Tactile push-button for local override/pairing, Bi-color Status LEDs (Red/Blue)
+- **Main Wi-Fi Chip / MCU:** ESP8266 Wi-Fi SoC (handles wireless network and control logic)
+- **Power Supply Section:** AC to DC power converter stepping down 230V AC mains to 5V DC and 3.3V DC
+- **Actuator Section:** 10A / 250V AC Relay driven by a transistor to turn the connected appliance ON and OFF
+- **Protection Diode:** 1N4148 flyback diode across the relay coil to stop inductive voltage spikes
+- **User Interface:** Push button for manual ON/OFF toggling and Wi-Fi reset, plus LED indicators for power and Wi-Fi status
 
 ![Circuit Diagram](circuit.png)
 
-### 2. Core Logic / Subsystem Mapping
+### 2. Teardown Observations
 
-**Hardware Functional Subsystems:**
-
-1. **Power Management Unit (PMU):**
-   - Metal Oxide Varistor (MOV) and thermal fuse provide mains surge and over-temperature protection.
-   - Non-isolated buck / isolated flyback topology steps down 230V AC mains to 5V DC rail.
-   - Linear regulator (AMS1117-3.3) provides ultra-clean 3.3V DC for the RF SoC and analog front-end.
-
-2. **Microcontroller & Wireless Front-End:**
-   - 32-bit Tensilica L106 RISC core clocked at 80/160 MHz.
-   - On-board PCB trace inverted-F antenna (IFA) matched to 50Ω impedance.
-   - SPI Flash memory (4 MB) storing bootloader, Wi-Fi stack, and firmware application.
-
-3. **Sensor & Actuator Driver:**
-   - Single-pole double-throw (SPDT) relay coil controlled via GPIO through a transistor driver.
-   - Shunt resistor and voltage divider feeding the energy measurement IC to monitor current, active power, and RMS voltage.
+1. **Power Domain Separation:** The board has a clear separation between the high-voltage AC mains section (230V) and the low-voltage DC section (3.3V/5V) with isolation slots cut into the PCB for safety.
+2. **Relay Driver:** The microcontroller cannot drive the relay coil directly because it draws too much current, so an NPN transistor is used as a switch with a flyback diode for protection.
+3. **Compact Antenna:** The Wi-Fi antenna is a meandered PCB trace antenna printed right on the edge of the board.
 
 ---
 
-## TASK 1B : 8051 Toolchain Bring-Up & Minimal System Verification
+## TASK 1B : 8051 Toolchain Setup & Verification
 
-### 1. Hardware Setup & Verification
+### 1. Hardware Setup
 
 - **Microcontroller:** Atmel AT89S52 (40-pin DIP)
-- **Operating Voltage:** 5.0 V DC (measured with Digital Multimeter)
-- **Clock Source:** 11.0592 MHz Quartz Crystal with dual 33 pF ceramic capacitors
-- **Reset Circuit:** 10 µF electrolytic capacitor to VCC and 10 kΩ pull-down resistor to GND
-- **ISP Interface:** MOSI (P1.5), MISO (P1.6), SCK (P1.7), RST (Pin 9)
+- **Clock Source:** 11.0592 MHz crystal oscillator with two 33pF ceramic capacitors
+- **Reset Circuit:** 10µF capacitor and 10kΩ resistor for power-on reset
+- **Programmer:** USB-ISP connected to MOSI (P1.5), MISO (P1.6), SCK (P1.7), and RST
 
-### 2. Core Logic / Pseudocode / Code Base
+### 2. Core Logic & Working Principle
+
+We installed and configured Keil µVision C51 for the AT89S52 target. To confirm our development setup works from end-to-end, we wrote a simple C program that toggles pin P1.0 at 1 Hz, compiled it to produce a `.hex` file, and flashed it to the chip.
 
 **Pseudocode:**
-1. Configure Keil µVision C51 for target microcontroller `AT89S52`.
-2. Generate startup code `STARTUP.A51` initializing CPU registers and data memory.
-3. Write a bare-metal C test routine toggling P1.0 at 1 Hz.
-4. Compile the target and generate an Intel HEX file (`CAT1_8051.hex`).
-5. Flash the hex file onto AT89S52 flash ROM using USB-ISP programmer.
-6. Verify clock oscillation using oscilloscope / multimeter logic probe.
+1. Include `<reg51.h>` to access 8051 special function registers.
+2. Define `TEST_PIN = P1^0` to control Port 1 Pin 0.
+3. Write a delay function using nested loops for ~500ms intervals.
+4. In an infinite loop, set `TEST_PIN = 1`, wait 500ms, set `TEST_PIN = 0`, and wait 500ms.
 
 **Code Base (`main.c`):**
 ```c
@@ -91,4 +77,4 @@ void main(void) {
 
 ### 3. Inference
 
-The commercial IoT teardown revealed the essential partition between high-voltage power domains, digital control cores, and RF front-ends. The 8051 toolchain was successfully established in Keil µVision C51, firmware compilation verified without errors, and the AT89S52 minimal system established stable clock oscillation and execution.
+By opening and inspecting the commercial smart plug, we saw firsthand how the power, microcontroller, Wi-Fi, and relay subsystems fit together on a production PCB. We also verified that our Keil µVision C51 toolchain, startup code, and USB-ISP programmer work correctly by successfully flashing our first bare-metal test code to the AT89S52 board.

@@ -6,73 +6,75 @@
 
 **NAME OF EXP:** STM32 GPIO Bring-Up and Switch-Controlled LED  
 
-**HARDWARE SETUP / PLATFORM:** STM32 Blue Pill Development Board (STM32F103C8T6 ARM Cortex-M3 @ 72 MHz) + ST-Link V2 Debugger + External Push-Button + Keil MDK-ARM + STM32CubeMX  
+**HARDWARE SETUP / PLATFORM:** STM32 Blue Pill Board (STM32F103C8T6) + ST-Link V2 Debugger + External Push Button + 10kΩ Resistor + Keil MDK-ARM + STM32CubeMX  
 
 ---
 
-## TASK 8A : Basic GPIO Input/Output Bring-Up
+## TASK 8A : GPIO Input/Output Bring-Up
 
 ### 1. Circuit Diagram
 
-The experiment demonstrates basic GPIO configuration and input/output control on the STM32F103C8T6 Blue Pill development board.
+In this task, we configured the GPIO pins on the STM32F103 Blue Pill development board to read an external push button and control the on-board LED.
 
-- **Development Board:** STM32 Blue Pill
-- **Microcontroller:** STM32F103C8T6 (32-bit ARM Cortex-M3)
-- **Clock Frequency:** 72 MHz (8 MHz external crystal multiplied via PLL)
-- **On-board User LED:** Connected to `PC13` (Active LOW: writing logic 0 turns ON, logic 1 turns OFF)
-- **Input Switch:** Tactile push-button connected to `PA0` with a 10 kΩ pull-down resistor to GND and button contact to +3.3V
+- **Development Board:** STM32 Blue Pill (STM32F103C8T6 @ 72 MHz)
+- **On-board User LED:** Connected to `PC13` (Active LOW: logic 0 turns the LED ON, logic 1 turns it OFF)
+- **External Switch:** Push button connected to `PA0` with an external 10kΩ pull-down resistor to GND and button contact to +3.3V (Active HIGH)
 
 ![Circuit Diagram](circuit.png)
 
-### 2. Core HAL Functions Utilized
+### 2. Core HAL Functions Used
 
-| Purpose | HAL Function | Implementation in Experiment |
-|---|---|---|
-| **Read Switch State** | `HAL_GPIO_ReadPin()` | Polls logic state of pin `PA0` (Pressed = `GPIO_PIN_SET`) |
-| **Direct LED Output** | `HAL_GPIO_WritePin()` | Sets `PC13` to `GPIO_PIN_RESET` (ON) or `GPIO_PIN_SET` (OFF) |
-| **Toggle Output State** | `HAL_GPIO_TogglePin()` | Inverts current logic state of `PC13` |
-| **Millisecond Timebase** | `HAL_GetTick()` | Returns millisecond system tick counter for non-blocking timing |
+| Function | What it does |
+|---|---|
+| `HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0)` | Reads whether the button on PA0 is currently pressed (returns `GPIO_PIN_SET` or `RESET`) |
+| `HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, state)` | Sets PC13 LOW (turns LED ON) or HIGH (turns LED OFF) |
+| `HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13)` | Flips the current LED state from ON to OFF or vice versa |
+| `HAL_GetTick()` | Returns the number of milliseconds elapsed since MCU reset, allowing non-blocking timing |
 
 ---
 
-## TASK 8B & 8C : Non-Blocking Short Press vs Long Press Event Classifier
+## TASK 8B & 8C : Non-Blocking Short Press vs Long Press Detection
 
-### 1. Core Logic & State Machine
+### 1. Working Principle
 
-**Working Principle:**
+Instead of using `HAL_Delay()`, which freezes the entire microcontroller and prevents it from doing anything else, we use `HAL_GetTick()` to measure how long the button stays pressed:
 
-Rather than using CPU-blocking delay functions (`HAL_Delay()`), which paralyze the processor and ignore incoming events, timing duration is classified asynchronously via `HAL_GetTick()`.
+1. When the button is pressed (`PA0 == HIGH`), we record the timestamp: `press_start = HAL_GetTick()`.
+2. While the button is held down, the microcontroller continues running background loops normally.
+3. When the button is released (`PA0 == LOW`), we calculate the duration:  
+   `duration = HAL_GetTick() - press_start`.
+4. **Classification:**
+   - **Short Press (< 1000 ms):** Toggles the LED state (or stops blinking if currently blinking).
+   - **Long Press (>= 1000 ms):** Switches the LED into a continuous fast blinking mode (5 Hz).
+   - If the LED is blinking and we press the button again with a short press, blinking stops and the LED turns off.
 
-```text
-Button Pressed (PA0 == HIGH)
-       │
-       ▼
-Record start_time = HAL_GetTick()
-       │
-       ▼
-Continue background execution
-       │
-       ▼
-Button Released (PA0 == LOW)
-       │
-       ▼
-duration = HAL_GetTick() - start_time
-       │
-       ├── If 50ms <= duration < 1000ms  ──> Short Press Event: Toggle LED / Stop Blinking
-       └── If duration >= 1000ms         ──> Long Press Event: Toggle 5 Hz Blinking Mode
+### 2. Pseudocode
+
+```c
+if (button_just_pressed) {
+    press_time = HAL_GetTick();
+}
+if (button_just_released) {
+    uint32_t duration = HAL_GetTick() - press_time;
+    if (duration >= 50 && duration < 1000) {
+        /* Short Press: Toggle LED */
+        is_blinking = 0;
+        HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    } else if (duration >= 1000) {
+        /* Long Press: Enable 5 Hz Blinking */
+        is_blinking = !is_blinking;
+    }
+}
+
+if (is_blinking) {
+    /* Non-blocking 5 Hz blink (toggle every 100 ms) */
+    if (HAL_GetTick() - last_blink >= 100) {
+        last_blink = HAL_GetTick();
+        HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    }
+}
 ```
-
-| User Action | Duration ($\Delta t$) | System Response |
-|---|---|---|
-| **Short Press** | $< 1000	ext{ ms}$ | Toggle LED ON/OFF state |
-| **Long Press** | $\ge 1000	ext{ ms}$ | LED enters continuous 5 Hz blinking mode |
-| **Subsequent Short Press** | $< 1000	ext{ ms}$ | Stop blinking mode immediately |
-| **Subsequent Long Press** | $\ge 1000	ext{ ms}$ | Re-enter continuous blinking mode |
-
-### 2. Code Base
-
-Implemented in `Core/Src/main.c` utilizing STM32 HAL GPIO and SysTick APIs without any blocking delay loops.
 
 ### 3. Inference
 
-The STM32 HAL GPIO drivers performed reliable switch detection. The non-blocking millisecond timestamping technique accurately distinguished between short toggles and sustained long presses while maintaining seamless concurrent LED blinking.
+The STM32 HAL GPIO library allowed clean digital I/O configuration. Using `HAL_GetTick()` completely avoided blocking delays, making the button response instant and letting the LED blink smoothly in the background without stuttering.

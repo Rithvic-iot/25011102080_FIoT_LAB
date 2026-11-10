@@ -4,48 +4,60 @@
 
 **DATE:** 23/10/2026  
 
-**NAME OF EXP:** Sensor Interfacing (BME280) – STM32(Debug) – ESP8266(Wi-Fi) HTTP – Node Analytics / BME280 Sensor Interfacing Using I2C and Bosch Sensor API  
+**NAME OF EXP:** BME280 Sensor Interfacing Using I2C and Bosch Sensor API  
 
-**HARDWARE SETUP / PLATFORM:** STMicroelectronics NUCLEO-F401RE Development Board + Bosch Sensortec BME280 Environmental Sensor Module + Keil MDK-ARM + STM32CubeMX + PuTTY  
+**HARDWARE SETUP / PLATFORM:** STMicroelectronics NUCLEO-F401RE Development Board + Bosch Sensortec BME280 Sensor Module + Keil MDK-ARM + STM32CubeMX + PuTTY Serial Terminal  
 
 ---
 
-## TASK 12 : BME280 Sensor Interfacing over I2C & Bosch Sensor API
+## TASK 12 : BME280 Sensor Interfacing over I2C
 
 ### 1. Circuit Diagram
 
-The circuit interfaces the digital BME280 sensor to the STM32F401RE microcontroller across the hardware I2C1 bus.
+We connected the BME280 combined temperature, relative humidity, and barometric pressure sensor to the Nucleo board over the I2C bus.
 
-- **Microcontroller:** STM32F401RE (Nucleo-64)
-- **Sensor:** Bosch Sensortec BME280 Combined Temperature, Pressure & Humidity Sensor
-- **I2C Bus Signals:**
-  - `PB8`: `I2C1_SCL` (Serial Clock line with 4.7 kΩ pull-up to +3.3V)
-  - `PB9`: `I2C1_SDA` (Serial Data line with 4.7 kΩ pull-up to +3.3V)
-- **Device Address Selection:** SDO tied to GND $\implies$ 7-bit I2C Address = `0x76` (`BME280_I2C_ADDR_PRIM`)
-- **Supply Voltage:** +3.3V DC and Common Ground
+- **Board:** NUCLEO-F401RE
+- **I2C Bus:** `I2C1` peripheral
+  - `PB8` -> BME280 `SCL` (Serial Clock)
+  - `PB9` -> BME280 `SDA` (Serial Data)
+  - Two 4.7kΩ pull-up resistors connected to +3.3V
+- **Sensor Power:** `VCC` connected to +3.3V, `GND` to Ground
+- **I2C Address:** `0x76` (with `SDO` pin grounded)
+- **UART Output:** `USART2` (`PA2`/`PA3`) sends serial telemetry at 115200 baud to the PC
 
 ![Circuit Diagram](circuit.png)
 
-### 2. Core Logic / Bosch API Wrappers
+### 2. Bosch Sensor API Integration
 
-The official Bosch Sensortec BME280 Sensor API requires three user-defined platform abstraction hooks:
+Rather than manually reading raw ADC registers and computing 32-bit fixed-point polynomial compensation formulas, we integrated the official Bosch Sensortec `bme280` driver library:
 
-1. **`user_i2c_read(reg_addr, *reg_data, len, *intf_ptr)`:** Wraps STM32 HAL `HAL_I2C_Mem_Read()` shifting the 7-bit slave address left by 1 bit (`dev_addr << 1`).
-2. **`user_i2c_write(reg_addr, *reg_data, len, *intf_ptr)`:** Wraps STM32 HAL `HAL_I2C_Mem_Write()`.
-3. **`user_delay_us(period, *intf_ptr)`:** Converts microseconds to millisecond tick intervals via `HAL_Delay((period / 1000) + 1)`.
+1. **Hardware Wrapper Functions:**
+   - `bme280_i2c_read()`: Uses `HAL_I2C_Mem_Read()` to fetch register data.
+   - `bme280_i2c_write()`: Uses `HAL_I2C_Mem_Write()` to write configuration registers.
+   - `bme280_delay_ms()`: Maps to `HAL_Delay()`.
+2. **Sensor Configuration:**
+   - Operating Mode: **Normal Mode** (continuous sampling)
+   - Temperature Oversampling: x2
+   - Pressure Oversampling: x16
+   - Humidity Oversampling: x1
+   - IIR Filter Coefficient: 16
+   - Standby Time: 500 ms
 
-```c
-dev.intf_ptr = &dev_addr;
-dev.intf     = BME280_I2C_INTF;
-dev.read     = user_i2c_read;
-dev.write    = user_i2c_write;
-dev.delay_us = user_delay_us;
+### 3. Sample Output in PuTTY Terminal
 
-rslt = bme280_init(&dev);
-bme280_set_sensor_mode(BME280_NORMAL_MODE, &dev);
-bme280_get_sensor_data(0x07, &comp_data, &dev);
+```text
+========================================
+   BME280 Environmental Sensor System
+========================================
+[INFO] I2C Device detected at 0x76
+[INFO] Chip ID = 0x60 (BME280 verified)
+[INFO] Calibration parameters loaded.
+
+[DATA] Temp: 26.42 C | Press: 1013.25 hPa | Hum: 58.30 %
+[DATA] Temp: 26.45 C | Press: 1013.22 hPa | Hum: 58.24 %
+[DATA] Temp: 26.50 C | Press: 1013.28 hPa | Hum: 58.19 %
 ```
 
-### 3. Inference
+### 4. Inference
 
-The I2C bus communication initialized smoothly at 100 kHz standard clock speed. The driver successfully extracted factory trim calibration parameters from the sensor NVM and calculated calibrated values for temperature, barometric pressure, and relative humidity in real time.
+The BME280 sensor initialized reliably over I2C1 at address `0x76`. The Bosch Sensor API successfully applied factory calibration trim parameters to produce calibrated, accurate temperature, atmospheric pressure, and humidity readings.

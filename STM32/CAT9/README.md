@@ -6,62 +6,84 @@
 
 **NAME OF EXP:** STM32 UART Command Controlled LED  
 
-**HARDWARE SETUP / PLATFORM:** STM32 Blue Pill Board (STM32F103C8T6 ARM Cortex-M3) + USB-to-UART Serial Converter + PC with PuTTY Serial Terminal + Keil MDK-ARM + STM32CubeMX  
+**HARDWARE SETUP / PLATFORM:** STM32 Blue Pill Board (STM32F103C8T6) + CP2102 / CH340 USB-to-UART Serial Module + PC running PuTTY Serial Terminal + Keil MDK-ARM + STM32CubeMX  
 
 ---
 
-## TASK 9A : Basic UART Communication & Line Termination Analysis
+## TASK 9A : UART Character Echo & Line Ending Handling
 
 ### 1. Circuit Diagram
 
-The circuit interfaces the STM32 USART1 peripheral to a host workstation using an asynchronous USB-to-TTL serial transceiver.
+We connected the STM32 Blue Pill's hardware USART1 serial port to a PC through a USB-to-TTL serial converter.
 
-- **Microcontroller:** STM32F103C8T6 (Blue Pill)
-- **USART Peripheral:** `USART1` (Asynchronous Mode)
-- **TX Pin:** `PA9` connected to USB-TTL `RXD`
-- **RX Pin:** `PA10` connected to USB-TTL `TXD`
-- **Common Ground:** MCU `GND` tied to USB-TTL `GND`
-- **On-board User LED:** Connected to `PC13` (Active LOW)
+- **Microcontroller:** STM32F103C8T6
+- **USART1 TX Pin:** `PA9` connected to USB-TTL `RXD`
+- **USART1 RX Pin:** `PA10` connected to USB-TTL `TXD`
+- **Ground:** Common ground (GND) connected between Blue Pill and USB-TTL
+- **On-board LED:** `PC13` (Active LOW)
+- **Serial Terminal Parameters:** 115200 Baud, 8 Data Bits, 1 Stop Bit, No Parity (115200-8-N-1)
 
 ![Circuit Diagram](circuit.png)
 
-### 2. Line Termination Investigation (`` vs `
-`)
+### 2. Line Termination Analysis (CR vs LF)
 
-| Test String | Sequence Transmitted | Observed Behavior in PuTTY Terminal |
-|---|---|---|
-| **Test 1** | `"HELLO
-"` | Prints `HELLO`, moves cursor to start of next line (Standard CR+LF). |
-| **Test 2** | `"HELLO"` | Prints `HELLO`, moves cursor to line start without linefeed; overwrites on next write. |
-| **Test 3** | `"HELLO
-"` | Moves cursor down one row, maintaining previous column index (staircase artifact). |
-| **Test 4** | `"HELLO
-WORLD
-"` | Displays two properly aligned distinct rows: `HELLO` followed by `WORLD`. |
+Different operating systems and terminal emulators use different line ending characters when Enter is pressed:
+- **Carriage Return (`\r`, `0x0D`):** Moves cursor back to the start of the line.
+- **Line Feed (`\n`, `0x0A`):** Moves cursor down to the next line.
+- **Handling in Code:** We check for either `\r` or `\n` as the command end marker. Whenever either character is detected, our parser terminates the string with a null character (`\0`) and begins processing the command.
 
 ---
 
-## TASK 9B : Text Command Parser Application Logic
+## TASK 9B : Serial Command Parser
 
-### 1. Core Logic & Supported Commands
+### 1. Supported Commands
 
-The firmware receives ASCII characters into a 64-byte accumulation buffer until a newline or carriage return delimiter is detected. The string is then evaluated against a command dictionary:
+The user types commands in the PuTTY terminal. When Enter is pressed, the STM32 parses the string and responds:
 
-| Command Sent | Action Executed by STM32 | Serial Confirmation Returned |
+| Command Sent | Action Taken | Microcontroller Reply |
 |---|---|---|
-| `LED ON` | Clears `PC13` to logic LOW | `OK: LED turned ON
-` |
-| `LED OFF` | Sets `PC13` to logic HIGH | `OK: LED turned OFF
-` |
-| `LED TOGGLE` | Inverts `PC13` logic state | `OK: LED toggled
-` |
-| `STATUS` | Reads current `PC13` state | `STATUS: LED is ON
-` or `OFF` |
+| `LED ON` | Turns the on-board LED ON (`PC13 = LOW`) | `[STM32] LED is turned ON\r\n` |
+| `LED OFF` | Turns the on-board LED OFF (`PC13 = HIGH`) | `[STM32] LED is turned OFF\r\n` |
+| `LED TOGGLE`| Inverts the LED's current state | `[STM32] LED toggled\r\n` |
+| Any other text | Does not change LED | `[ERROR] Unknown command. Available: LED ON, LED OFF, LED TOGGLE\r\n` |
 
-### 2. Code Base
+### 2. Pseudocode
 
-Implemented in `Core/Src/main.c` utilizing STM32 HAL UART polling functions (`HAL_UART_Transmit`, `HAL_UART_Receive`).
+```c
+char rx_buf[64];
+uint8_t rx_idx = 0;
+
+void process_serial() {
+    uint8_t ch;
+    if (HAL_UART_Receive(&huart1, &ch, 1, 10) == HAL_OK) {
+        HAL_UART_Transmit(&huart1, &ch, 1, 10); /* Echo character to terminal */
+        
+        if (ch == '\r' || ch == '\n') {
+            if (rx_idx > 0) {
+                rx_buf[rx_idx] = '\0'; /* Terminate string */
+                if (strcmp(rx_buf, "LED ON") == 0) {
+                    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+                    send_string("\r\n[STM32] LED is turned ON\r\n");
+                } else if (strcmp(rx_buf, "LED OFF") == 0) {
+                    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+                    send_string("\r\n[STM32] LED is turned OFF\r\n");
+                } else if (strcmp(rx_buf, "LED TOGGLE") == 0) {
+                    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+                    send_string("\r\n[STM32] LED toggled\r\n");
+                } else {
+                    send_string("\r\n[ERROR] Unknown command\r\n");
+                }
+                rx_idx = 0;
+            }
+        } else {
+            if (rx_idx < sizeof(rx_buf) - 1) {
+                rx_buf[rx_idx++] = ch;
+            }
+        }
+    }
+}
+```
 
 ### 3. Inference
 
-The experiment demonstrated structured serial packet parsing on ARM Cortex-M microcontrollers. The character parser reliably identified string commands, filtered escape characters, and accurately actuated the hardware LED.
+The Blue Pill established fast and stable serial communication with the host PC at 115200 baud. Characters echoed cleanly as typed, and the string comparison parser executed every command correctly, giving instant feedback to the terminal.

@@ -6,57 +6,37 @@
 
 **NAME OF EXP:** UART Driver and Serial Debugging  
 
-**HARDWARE SETUP / PLATFORM:** AT89S52 Microcontroller Development Board + USB-to-TTL Serial Converter (CP2102/CH340) + PC PuTTY Terminal Emulator + Keil µVision C51  
+**HARDWARE SETUP / PLATFORM:** AT89S52 Microcontroller Board + CP2102 USB-to-TTL Serial Converter + PC with PuTTY Serial Terminal + Keil µVision C51  
 
 ---
 
-## TASK 6A : UART Driver Initialization & String Transmission
+## TASK 6A & 6B : UART Driver & Interactive Terminal Echo
 
 ### 1. Circuit Diagram
 
-The circuit connects the hardware UART pins of the AT89S52 to a PC via an asynchronous USB-to-TTL serial converter.
+The circuit connects the hardware UART of the 8051 to a laptop via a USB-to-TTL serial module.
 
-- **Microcontroller:** AT89S52
-- **TXD Pin:** Port 3, Pin 1 (`P3.1`, Pin 11) connected to USB-TTL `RXD`
-- **RXD Pin:** Port 3, Pin 0 (`P3.0`, Pin 10) connected to USB-TTL `TXD`
-- **Common Ground:** MCU `GND` connected to USB-TTL `GND`
-- **Baud Rate Timing Peripheral:** Timer 1 in Mode 2 (8-bit Auto-Reload)
+- **Microcontroller:** AT89S52 (11.0592 MHz crystal)
+- **TXD Pin:** `P3.1` (Pin 11) connected to USB-TTL `RXD`
+- **RXD Pin:** `P3.0` (Pin 10) connected to USB-TTL `TXD`
+- **Ground:** Common ground between 8051 and USB-TTL
+- **PC Serial Settings:** 9600 Baud, 8 Data Bits, 1 Stop Bit, No Parity (9600-8-N-1)
 
 ![Circuit Diagram](circuit.png)
 
-### 2. Baud Rate Derivation (9600 Baud)
+### 2. Baud Rate Calculation for 9600 Baud
 
-For the standard 8051 architecture with crystal $f_{osc} = 11.0592	ext{ MHz}$ and $SMOD = 0$:
+Using Timer 1 in Mode 2 (8-bit auto-reload) with an 11.0592 MHz crystal:
+$$	ext{Baud Rate} = rac{f_{osc}}{32 	imes 12 	imes (256 - TH1)} = rac{28800}{256 - TH1}$$
+$$9600 = rac{28800}{256 - TH1} \implies 256 - TH1 = 3 \implies TH1 = 253 = 	ext{0xFD}$$
+Setting `TH1 = 0xFD` produces exactly 9600 baud with **0% timing error**.
 
-$$	ext{UART Baud Rate} = rac{2^{SMOD}}{32} 	imes rac{f_{osc}}{12 	imes (256 - TH1)}$$
+### 3. Core Logic / Working Principle
 
-$$9600 = rac{1}{32} 	imes rac{11059200}{12 	imes (256 - TH1)} = rac{28800}{256 - TH1}$$
+1. **Initialization:** Set Timer 1 to Mode 2 (`TMOD = 0x20`), reload `TH1 = 0xFD`, start the timer (`TR1 = 1`), and configure `SCON = 0x50` (Mode 1, Receiver Enabled).
+2. **Transmission:** When sending a byte, we write it to `SBUF` and wait for the `TI` flag to become `1`.
+3. **Interactive Echo:** When a character is typed into PuTTY on the PC, the 8051 UART receives it, triggers the receive interrupt (`RI = 1`), stores it in a circular ring buffer, and immediately transmits the character back so it appears on the PuTTY screen.
 
-$$256 - TH1 = rac{28800}{9600} = 3 \implies TH1 = 256 - 3 = 253 = 	ext{0xFD}$$
+### 4. Inference
 
-Reloading `TH1 = 0xFD` into Timer 1 achieves exactly 9600 baud with **0.00% clock error**.
-
----
-
-## TASK 6B : Interactive PuTTY Terminal Echo & RX Ring Buffer
-
-### 1. Core Logic / Pseudocode / Code Base
-
-**Working Principle:**
-
-The UART receiver operates via interrupt `vector 4`. When a character arrives, the hardware sets the `RI` flag, triggering `serial_ISR()`. The ISR fetches the character from `SBUF`, clears `RI`, and enqueues the byte into a circular ring buffer (`rx_buffer`). The foreground loop dequeues received characters and re-transmits them to the terminal (`uart_send_char()`).
-
-**Pseudocode:**
-1. Configure `TMOD` for Timer 1 Mode 2 (8-bit auto-reload).
-2. Set `TH1 = 0xFD`, `TL1 = 0xFD`, start Timer 1 (`TR1 = 1`).
-3. Set `SCON = 0x50` (Mode 1, 8-bit UART, Receiver Enabled `REN = 1`).
-4. Enable interrupts (`ES = 1`, `EA = 1`).
-5. Transmit formatted banner `"Hello from 8051"`.
-6. Continuously pop characters from ring buffer and echo back to terminal.
-
-**Code Base (`main.c`):**
-Implemented with modular driver functions: `uart_init()`, `uart_send_char()`, `uart_send_string()`, and `serial_ISR()`.
-
-### 3. Inference
-
-The UART driver established reliable bidirectional communication with the PuTTY serial console at 9600-8-N-1. The interrupt-driven ring buffer prevented character loss during bursts, validating the mathematical precision of the 8051 baud rate generator.
+The 8051 established clean, bi-directional communication with the PC terminal at 9600 baud. The text "Hello from 8051!" was received accurately, and every key typed in PuTTY echoed back instantly without dropped characters.

@@ -6,44 +6,64 @@
 
 **NAME OF EXP:** STM32F401RE Cortex-M4: GPIO and User Input Programming  
 
-**HARDWARE SETUP / PLATFORM:** STMicroelectronics NUCLEO-F401RE Development Board (ARM Cortex-M4 with FPU @ 84 MHz) + Integrated ST-LINK/V2-1 + Keil MDK-ARM + STM32CubeMX  
+**HARDWARE SETUP / PLATFORM:** STMicroelectronics NUCLEO-F401RE Board (ARM Cortex-M4 with FPU @ 84 MHz) + Integrated ST-LINK/V2-1 + Keil MDK-ARM + STM32CubeMX  
 
 ---
 
-## TASK 1 & 2 : On-board LED Bring-Up & Switch State Remembrance
+## TASK 11A, 11B & 11C : On-Board Peripherals & Button State Machine
 
 ### 1. Circuit Diagram
 
-The experiment utilizes the integrated user peripherals on the STM32 Nucleo-64 development board.
+This experiment transitions to the high-performance STM32 Nucleo-F401RE development board, using its built-in hardware peripherals.
 
-- **Development Platform:** NUCLEO-F401RE
-- **Processor Core:** ARM 32-bit Cortex-M4 with FPU @ 84 MHz
-- **On-board User LED (LD2):** Green LED connected to pin `PA5` (Arduino connector D13 compatible, Active HIGH)
-- **On-board User Button (B1):** Blue tactile switch connected to `PC13` with hardware pull-up resistor to 3.3V (Active LOW)
-- **Debugger Interface:** On-board ST-LINK/V2-1 supporting SWD in-circuit programming and Virtual COM port
+- **Board:** STMicroelectronics NUCLEO-F401RE
+- **Core:** ARM Cortex-M4 running at 84 MHz
+- **On-board User LED (LD2):** Connected to pin `PA5` (Active HIGH: logic 1 = ON, logic 0 = OFF)
+- **On-board User Push Button (B1):** Connected to pin `PC13` with hardware pull-up (Active LOW: logic 0 = Pressed, logic 1 = Released)
+- **Built-in Programmer:** ST-LINK/V2-1 on USB (provides programming, debugging, and Virtual COM Port)
 
 ![Circuit Diagram](circuit.png)
 
-### 2. State Remembrance Logic
+### 2. Tasks Performed
 
-When button B1 is actuated, the controller identifies the falling edge (`PC13 == GPIO_PIN_RESET`). Upon release (`PC13 == GPIO_PIN_SET`), the system toggles `PA5` via `HAL_GPIO_TogglePin()`. The LED retains its updated state indefinitely after release until the next valid event.
+1. **Task 1 (Basic LED Blink):** Configured `PA5` as GPIO output and toggled the green LED LD2 at 1 Hz using `HAL_Delay(500)`.
+2. **Task 2 (Button State Remembrance):** Read the blue button on `PC13`. Each button press toggles the LED state and keeps it in that state even after the button is released.
+3. **Task 3 (Short vs Long Press Event Classifier):**
+   - **Short Press (< 1000 ms):** Toggles the LED on/off.
+   - **Long Press (>= 1000 ms):** Puts the LED into a fast 5 Hz blinking mode.
+   - **Subsequent Press:** Clears blinking mode and turns off the LED.
 
----
+### 3. Core Logic & State Tracking
 
-## TASK 3 : Short-Press vs Long-Press Detection
+```c
+uint32_t press_start = 0;
+uint8_t is_blinking = 0;
+uint32_t last_blink_time = 0;
 
-### 1. Timing Specification
+void check_user_button(void) {
+    /* Button on PC13 is Active LOW */
+    if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_RESET) {
+        if (press_start == 0) {
+            press_start = HAL_GetTick();
+        }
+    } else {
+        if (press_start != 0) {
+            uint32_t duration = HAL_GetTick() - press_start;
+            press_start = 0;
+            
+            if (duration >= 50 && duration < 1000) {
+                /* Short press: toggle LED */
+                is_blinking = 0;
+                HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_5);
+            } else if (duration >= 1000) {
+                /* Long press: toggle blinking mode */
+                is_blinking = !is_blinking;
+            }
+        }
+    }
+}
+```
 
-| Input Event | Pulse Duration Threshold | Target Firmware Response |
-|---|---|---|
-| **Short Press** | $40	ext{ ms} \le \Delta t < 1000	ext{ ms}$ | Invert current LED state (`HAL_GPIO_TogglePin`) |
-| **Long Press** | $\Delta t \ge 1000	ext{ ms}$ | Activate continuous 5 Hz fast alert blink mode |
-| **Subsequent Short Press** | $< 1000	ext{ ms}$ | Terminate blink mode and return to static state |
+### 4. Inference
 
-### 2. Code Base
-
-Implemented in `Core/Src/main.c` utilizing ARM Cortex-M4 SysTick timestamp delta calculations (`HAL_GetTick()`).
-
-### 3. Inference
-
-The Cortex-M4 GPIO peripheral initialized seamlessly via STM32 HAL drivers. The non-blocking duration classifier accurately captured transient switch actuations and sustained holds without blocking concurrent CPU tasks.
+The on-board LED and user button on the Nucleo-F401RE board functioned properly. Notice that unlike the Blue Pill where the LED on `PC13` was active-LOW, the Nucleo LD2 on `PA5` is active-HIGH, which required inverting our logic levels accordingly.

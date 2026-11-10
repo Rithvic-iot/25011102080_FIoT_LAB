@@ -6,55 +6,44 @@
 
 **NAME OF EXP:** Human-Machine Interface using Matrix Keypad, LEDs, and Seven-Segment Display  
 
-**HARDWARE SETUP / PLATFORM:** AT89S52 MCU Development Board + 4x4 Matrix Keypad (Port 2) + Common Cathode 7-Segment Display with 10kΩ Resistor Pack (Port 0) + 4x Status LEDs (Port 1) + Keil µVision C51  
+**HARDWARE SETUP / PLATFORM:** AT89S52 Microcontroller Board + 4x4 Matrix Keypad (Port 2) + Common Cathode 7-Segment Display (Port 0) + 4 Mode LEDs (Port 1) + Keil µVision C51  
 
 ---
 
-## TASK 4 : Matrix Keypad Scanning, 7-Segment Feedback & LED Actuation
+## TASK 4 : Keypad Scanning, 7-Segment Feedback & LED Actuation
 
 ### 1. Circuit Diagram
 
-The circuit interfaces an input 4x4 matrix keypad, visual numeric feedback via a 7-segment display, and operational mode indication through 4 LEDs.
+This experiment builds a complete user interface: the user presses a key on the 4x4 matrix keypad, the pressed number appears on the 7-segment display, and a matching LED function runs on Port 1.
 
 - **Microcontroller:** AT89S52
-- **Keypad Interface:** Port 2 (Rows `P2.0`-`P2.3` Output, Columns `P2.4`-`P2.7` Input with internal pull-ups)
-- **7-Segment Display:** Port 0 (`P0.0`-`P0.7` driving segments a-g, dp through external 10 kΩ pull-up network)
-- **LED Mode Indicators:** Port 1 (`P1.0`-`P1.3` driving LEDs 1-4 with 330Ω resistors)
+- **Keypad Matrix:** Port 2 (Rows on `P2.0`-`P2.3`, Columns on `P2.4`-`P2.7`)
+- **7-Segment Display:** Common Cathode connected to Port 0 with an external 10kΩ pull-up resistor pack
+- **LED Indicators:** Port 1 Pins `P1.0` through `P1.3`
 
 ![Circuit Diagram](circuit.png)
 
 ### 2. Functional Requirements & Key Mapping
 
-| Key Press | 7-Segment Display | LED Operation / Function Triggered |
+| Key Pressed | 7-Segment Display | LED Action Triggered |
 |:---:|:---:|---|
-| **1** | `1` | LED1 ON (P1.0 = 1, others 0) |
-| **2** | `2` | LED2 ON (P1.1 = 1, others 0) |
-| **3** | `3` | LED3 ON (P1.2 = 1, others 0) |
-| **4** | `4` | LED4 ON (P1.3 = 1, others 0) |
-| **5** | `5` | Running LED Pattern ($0001_2 	o 0010_2 	o 0100_2 	o 1000_2$) |
-| **6** | `6` | Alternate LEDs Flashing ($1010_2 \leftrightarrow 0101_2$) |
-| **7** | `7` | 4-bit Binary Counter (0 to 15 continuous count) |
-| **8** | `8` | All LEDs Synchronous Blink ($1111_2 \leftrightarrow 0000_2$) |
-| **9** | `9` | All LEDs OFF ($0000_2$) |
-| **0** | `0` | System Reset (Clear display and reset controller state) |
+| **1** | `1` | LED 1 ON (`P1.0 = 1`, others OFF) |
+| **2** | `2` | LED 2 ON (`P1.1 = 1`, others OFF) |
+| **3** | `3` | LED 3 ON (`P1.2 = 1`, others OFF) |
+| **4** | `4` | LED 4 ON (`P1.3 = 1`, others OFF) |
+| **5** | `5` | Running LED pattern ($0001_2 	o 0010_2 	o 0100_2 	o 1000_2$) |
+| **6** | `6` | Alternate LEDs flashing ($1010_2 \leftrightarrow 0101_2$) |
+| **7** | `7` | 4-bit binary counter (0 to 15) |
+| **8** | `8` | All LEDs flashing synchronously |
+| **9** | `9` | All LEDs turned OFF |
+| **0** | `0` | Reset System (Display shows 0, LEDs turn off) |
 
-### 3. Core Logic / Pseudocode / Code Base
+### 3. Core Logic & Working Principle
 
-**Working Principle:**
-
-The 4x4 matrix keypad uses row-column scanning. Rows (`P2.0`-`P2.3`) are driven LOW sequentially while columns (`P2.4`-`P2.7`) are read. A pressed switch pulls the corresponding column LOW. Software resolves the (row, column) intersection into numeric key values 0-9.
-
-Upon detecting a valid key press, the segment decoding function outputs the corresponding 7-segment bit pattern onto Port 0, and the central command dispatcher executes the dedicated LED function.
-
-**Pseudocode:**
-1. Define 7-segment lookup table for common-cathode encoding.
-2. Implement `keypad_scan()`: Drive row $i$ LOW; test columns for logic LOW; return key value.
-3. Update 7-segment display on Port 0 with `display_digit(key)`.
-4. Dispatch mapped LED function via `switch(key)` (modes 0-9).
-
-**Code Base:**
-Implemented cleanly in `main.c` adhering to modular functions: `keypad_scan()`, `display_digit()`, `running_led()`, `alternate_led()`, and `blink_all()`.
+1. **Keypad Scanning:** We ground one row at a time (`P2.0` to `P2.3`) by writing logic `0` to that row, then read the column pins (`P2.4` to `P2.7`). If a button is pressed, the corresponding column reads logic `0`.
+2. **7-Segment Display:** Port 0 is open-drain, so it needs a 10kΩ resistor pack tied to +5V. We use a lookup table containing the 7-segment segment patterns for digits 0 to 9 (`0x3F` for '0', `0x06` for '1', `0x5B` for '2', etc.).
+3. **LED Action:** A switch statement executes the mapped pattern on Port 1 based on the pressed key.
 
 ### 4. Inference
 
-The HMI subsystem performed matrix keypad scanning without ghosting or false triggers. The 7-segment display correctly reflected the selected input digit while the respective LED pattern executed stably in real time.
+The 4x4 keypad matrix scanned keys cleanly without ghosting. The 7-segment display gave instant visual feedback of the selected number, and all ten mapped LED functions executed reliably.
