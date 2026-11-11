@@ -1,0 +1,85 @@
+[
+    {
+        "id": "mqtt_broker_emqx",
+        "type": "mqtt-broker",
+        "name": "EMQX Public Broker",
+        "broker": "broker.emqx.io",
+        "port": "1883",
+        "clientid": "NodeRED_Dashboard_Client",
+        "autoConnect": true,
+        "usetls": false,
+        "compatmode": false,
+        "keepalive": "60",
+        "cleansession": true
+    },
+    {
+        "id": "mqtt_in_telemetry",
+        "type": "mqtt in",
+        "name": "Subscribe BME280 Data",
+        "topic": "stm32/test/data",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "mqtt_broker_emqx",
+        "wires": [["debug_mqtt_out", "temp_gauge", "hum_chart"]]
+    },
+    {
+        "id": "debug_mqtt_out",
+        "type": "debug",
+        "name": "Live MQTT Telemetry",
+        "complete": "payload",
+        "wires": []
+    },
+    {
+        "id": "temp_gauge",
+        "type": "ui_gauge",
+        "name": "Temperature Gauge",
+        "group": "dashboard_group",
+        "order": 1,
+        "width": 6,
+        "height": 4,
+        "gtype": "gage",
+        "title": "Temperature (C)",
+        "label": "C",
+        "format": "{{payload.temp}}",
+        "min": 0,
+        "max": 50,
+        "wires": []
+    },
+    {
+        "id": "hum_chart",
+        "type": "ui_chart",
+        "name": "Humidity History Chart",
+        "group": "dashboard_group",
+        "order": 2,
+        "width": 6,
+        "height": 4,
+        "label": "Relative Humidity (%)",
+        "chartType": "line",
+        "ymin": "0",
+        "ymax": "100",
+        "wires": []
+    },
+    {
+        "id": "ui_switch_actuator",
+        "type": "ui_switch",
+        "name": "LED Override Switch",
+        "group": "dashboard_group",
+        "order": 3,
+        "label": "Toggle Remote LED",
+        "onvalue": "TOGGLE",
+        "onvalueType": "str",
+        "offvalue": "TOGGLE",
+        "offvalueType": "str",
+        "wires": [["mqtt_out_cmd"]]
+    },
+    {
+        "id": "mqtt_out_cmd",
+        "type": "mqtt out",
+        "name": "Publish Command",
+        "topic": "stm32/control",
+        "qos": "0",
+        "retain": "false",
+        "broker": "mqtt_broker_emqx",
+        "wires": []
+    }
+]
