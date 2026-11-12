@@ -1,0 +1,5 @@
+[
+  {"id":"http_in_on","type":"inject","name":"Turn LED ON","topic":"","payload":"/led/on","repeat":"","crontab":"","once":false,"onceDelay":0.1,"x":140,"y":100,"wires":[["http_req_on"]]},
+  {"id":"http_req_on","type":"http request","name":"GET /led/on","method":"GET","ret":"txt","paytoqs":"ignore","url":"http://192.168.1.100/led/on","tls":"","persist":false,"authType":"","senderr":false,"headers":[],"x":340,"y":100,"wires":[["debug_out"]]},
+  {"id":"debug_out","type":"debug","name":"HTTP Response","active":true,"tosidebar":true,"console":false,"tostatus":false,"complete":"payload","targetType":"msg","statusVal":"","statusType":"auto","x":560,"y":140,"wires":[]}
+]
