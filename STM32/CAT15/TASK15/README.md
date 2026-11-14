@@ -1,9 +1,13 @@
-# CAT 15 - Capstone IoT Project: Environmental Telemetry & Actuation Dashboard
+# CAT 15 - Capstone IoT Project: College Sensor vs Chennai Weather Intelligence & Recommendations
 
 ## 1. Experiment Overview
-The objective of this capstone project is to develop an end-to-end IoT monitoring and remote control system using the **STM32F401RE Nucleo-64** microcontroller. The system continuously acquires ambient environmental parameters (temperature, humidity, and barometric pressure) using an I2C digital sensor, packages the data into structured JSON format, and transmits it via an **ESP8266** Wi-Fi module using the **MQTT protocol** to an external MQTT broker (`broker.emqx.io:1883`). 
+The objective of this capstone project is to develop an intelligent microclimate monitoring, cloud telemetry, and decision-support system using the **STM32F401RE Nucleo-64** microcontroller. The system continuously acquires ambient environmental parameters (temperature, relative humidity, and barometric pressure) using a Bosch **BME280** digital sensor over I2C, packages the data into structured JSON telemetry, and transmits it via an **ESP8266** Wi-Fi module using the **MQTT protocol** to an external MQTT broker (`broker.emqx.io:1883`).
 
-A web-based **Node-RED dashboard** subscribes to the telemetry stream to display real-time metric gauges, historical trends, and device connection status. The system also supports bi-directional control, allowing users to toggle an onboard actuator (LD2 / Relay on PA5) directly from the dashboard via an MQTT command topic.
+A cloud-connected **Node-RED dashboard** ingests this live telemetry stream, computes derived biometeorological parameters (Heat Index "Feels Like" temperature and Dew Point moisture saturation), benchmarks campus microclimate against live regional weather data for Chennai City (via OpenWeather API), and presents:
+1. **Real-Time Environmental Comparison Table** (College Ground Sensor vs Chennai City OpenWeather Baseline, with live $\Delta$ variance calculation).
+2. **Sensor-Based Actionable Recommendations** with automated rule-based status tags (e.g. Mild Heat, Humid/Muggy, Normal Pressure, Extreme Caution).
+3. **Comparative Environmental Insights** detailing microclimate differentials, urban heat island attenuation, physiological load, and atmospheric stability.
+4. **Bi-Directional Actuation Control** allowing remote toggling of campus ventilation/actuator hardware (Nucleo PA5 user indicator / relay).
 
 ---
 
@@ -34,12 +38,15 @@ The diagram below illustrates the complete interconnections between the STM32F40
 ## 4. Node-RED Dashboard & Flow Architecture
 
 ### Live Node-RED Web Dashboard
-The interactive dashboard features real-time visual gauges for Temperature, Relative Humidity, and Barometric Pressure, along with historical trend charts and remote actuator toggle switches:
+The web dashboard provides real-time situational awareness and comparative microclimate intelligence:
+- **Comparison Grid:** Direct side-by-side benchmarking of College Ground BME280 metrics ($28.67^\circ\text{C}$, $71.25\%$, $1009.97\text{ hPa}$) versus regional Chennai City weather ($26.98^\circ\text{C}$, $81.00\%$, $1014.00\text{ hPa}$).
+- **Automated Recommendations:** Active-range evaluation triggers immediate mitigation advisories (e.g. fan operation for convective cooling, hydration alerts).
+- **Analytical Insights:** Dynamic assessment of urban heat island differentials and human thermal comfort indices.
 
 ![Node-RED Dashboard](dashboard.png)
 
 ### Node-RED Flow Pipeline
-The backend Node-RED flow receives MQTT packets on `fiot/lab/telemetry`, parses the JSON payload, formats gauge outputs, evaluates alert thresholds, and publishes command payloads to `fiot/lab/actuator`:
+The backend Node-RED flow receives MQTT packets on `fiot/lab/telemetry`, parses the JSON payload, computes Heat Index and Dew Point formulas, polls external meteorological baselines, and dispatches command payloads to `fiot/lab/actuator`:
 
 ![Node-RED Flow](nodered_flow.png)
 
@@ -106,3 +113,4 @@ END
 2. The ESP8266 Wi-Fi co-processor reliably bridged UART serial data to the cloud MQTT broker over TCP port 1883 with zero frame dropouts under normal operation.
 3. The Node-RED dashboard provided responsive visual updates (< 250 ms update latency) and successfully executed remote bidirectional commands to actuate the Nucleo board's LED.
 4. This capstone project validates a complete, modular, and industrial-standard IoT architecture bridging embedded firmware, wireless networking, cloud messaging, and visual human-machine interfaces.
+
