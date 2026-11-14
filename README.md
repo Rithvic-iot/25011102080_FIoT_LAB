@@ -12,10 +12,10 @@
 
 | Metric | Result | Status |
 |---|---|---|
-| **Total Tasks Discovered** | 28 / 28 | **PASSED** |
-| **Tasks Successfully Passed** | 28 / 28 | **PASSED** |
+| **Total Tasks Discovered** | 29 / 29 | **PASSED** |
+| **Tasks Successfully Passed** | 29 / 29 | **PASSED** |
 | **Tasks Failed** | 0 | **NONE** |
-| **Total Automated File Checks** | 198 / 198 | **100% PASS** |
+| **Total Automated File Checks** | 206 / 206 | **100% PASS** |
 | **Overall Evaluation Status** | **PASSED** | **VERIFIED** |
 
 ---
@@ -71,8 +71,10 @@
     │   └── TASK12C/                            # Multi-Variable Telemetry Output over UART
     ├── CAT13/
     │   └── TASK13/                             # Custom ESP8266 MQTT Driver & Telemetry
-    └── CAT14/
-        └── TASK14/                             # Node-RED Cloud Analytics Dashboard & Actuation
+    ├── CAT14/
+    │   └── TASK14/                             # Node-RED Cloud Analytics Dashboard & Actuation
+    └── CAT15/
+        └── TASK15/                             # Capstone IoT Environmental Telemetry & Actuation Dashboard
 ```
 
 ---
@@ -105,7 +107,7 @@ Every 8051 task directory contains:
 
 ---
 
-## 3. Platform 2: STM32 ARM Cortex-M Tasks (15 Tasks)
+## 3. Platform 2: STM32 ARM Cortex-M Tasks (16 Tasks)
 
 Every STM32 task directory contains:
 - `*.ioc`: STM32CubeMX hardware initialization configuration
@@ -133,3 +135,4 @@ Every STM32 task directory contains:
 | **[TASK12C](STM32/CAT12/TASK12C/)** | Multi-Variable Telemetry Stream | Nucleo-F401RE, BME280, USART2 VCP | Temperature, pressure, and humidity streaming to PC terminal |
 | **[TASK13](STM32/CAT13/TASK13/)** | MQTT Telemetry Publishing | Nucleo-F401RE, BME280, ESP8266, EMQX | Lightweight custom `ESPLib` driver publishing to `stm32/test/data` |
 | **[TASK14](STM32/CAT14/TASK14/)** | Cloud Dashboard & Actuation | Nucleo-F401RE, ESP8266, Node-RED | Live web dashboard with gauges, trends, and remote LED toggle |
+| **[TASK15](STM32/CAT15/TASK15/)** | Capstone IoT Monitoring & Control | Nucleo-F401RE, BME280, ESP8266, Node-RED | End-to-end telemetry pipeline, interactive dashboard, bi-directional actuation |
